@@ -1,0 +1,109 @@
+---
+title: "CoffeeDataAnalysis"
+author: "Aske Svane Qvist"
+date: "30 May 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import 
+
+Packages
+```{r}
+library(pacman)
+p_load(tidyverse, sf, ggspatial, rnaturalearth, rnaturalearthdata, dplyr)
+
+install.packages(c("cowplot", "googleway",  "ggrepel", "libwgeom"))
+
+```
+
+Data
+```{r}
+data <- read_csv("data/arabica_data_cleaned_LongLat.csv")
+
+```
+
+## Data cleaning
+```{r}
+
+# remove farms without coordinates 
+data <- data %>% drop_na(location_coordinates)
+
+
+# Create longitude and latitude columns
+coordinates <- data.frame(do.call("rbind", strsplit(as.character(data$location_coordinates), ",", fixed = TRUE)))
+
+coordinates <- coordinates %>% 
+  rename(
+    Y = X1,
+    X = X2
+    ) %>% 
+  mutate(
+    X = as.numeric(as.character(X)),
+    Y = as.numeric(as.character(Y))
+  )
+
+data <- cbind(data, coordinates)
+
+# Make geometry point column
+data <- st_as_sf(data, coords = c("X", "Y"), remove = FALSE, 
+    crs = 4326, agr = "constant")
+
+
+# Only keep relevant columns
+data <- data[c("X", "Y", "Region","Country.of.Origin","Farm.Name", "Processing.Method", "unit_of_measurement", "altitude_low_meters", "altitude_high_meters", "altitude_mean_meters", "Aroma", "Flavor", "Aftertaste", "Acidity", "Body", "Balance", "Uniformity", "Sweetness")]
+
+# Quick overview 
+ggplot() +
+    geom_sf() +
+    geom_point(data = data, aes(x = X, y = Y), size = 4, 
+        shape = 23, fill = "darkred") +
+    coord_sf(xlim = c(-180, 180), ylim = c(-60, 60), expand = FALSE)
+
+
+```
+
+## this one is mess
+```{r}
+
+data_sf <- st_as_sf(data, coords = c("X", "Y"), 
+    crs = 4326, agr = "constant")
+
+# Convert the table into an sf object on the basis of X and Y columns
+data_sf <- st_as_sf(data, coords = c("X", "Y"), crs = "+init=epsg:4326 +proj=longlat +ellps=WGS84
++datum=WGS84 +no_defs +towgs84=0,0,0")
+
+ggplot() +
+  geom_sf(data = data_sf) +
+  ggtitle("Map of Plot Locations")
+
+
+# Define the projection of Lat/Long coordinates as EPSG 4326
+data_sf4326<- st_set_crs(data_sf,"4326")
+st_crs(data_sf4326)
+
+# Transform the projection to a 2D projection using EPSG 3035
+cities_sf3035<- st_transform(cities_sf4326, ___________)
+
+# Verify the projection is 'projected' not 'geographic'
+______(cities_sf3035)
+
+
+
+```
+
+## 
+https://r-spatial.org/r/2018/10/25/ggplot2-sf-2.html
+
+```{r}
+
+```
+
+
+
+
+
+
