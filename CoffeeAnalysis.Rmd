@@ -1,0 +1,410 @@
+---
+title: "DataAnalysis"
+author: "Aske Svane Qvist and Hania Matera"
+date: "2 June 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Analysis 
+
+This script contains data pre-processing, visualisations, as well as spatial analysis for our exam project on the spatial influence on coffee production.
+
+- The longitude and latitude coordinates in the csv-file have been manually annotated using Google Maps.
+
+## Packages
+```{r}
+library(pacman)
+p_load(tidyverse, sf, mapview, spdep, leaflet, worldgeojson, highcharter, htmlwidgets)
+
+```
+
+
+## Pre-processing
+
+Create a geometry column and drop unneccessary information
+```{r}
+# Importing the data.
+data <- read_csv("data/coffee_arabica_LongLat.csv")
+
+
+# remove farms without coordinates. The locations are annotated comma seperated.
+data <- data %>% drop_na(location_coordinates)
+
+
+# Create longitude and latitude column seperately (X and Y)
+coordinates <- data.frame(do.call("rbind", strsplit(as.character(data$location_coordinates), ",", fixed = TRUE)))
+
+# Create appropriate column names and change to numeric
+coordinates <- coordinates %>% 
+  rename(
+    Y = X1,
+    X = X2
+    ) %>% 
+  mutate(
+    X = as.numeric(as.character(X)),
+    Y = as.numeric(as.character(Y))
+  )
+
+# Combine the new coordinate columns with the data.
+data <- cbind(data, coordinates)
+rm(coordinates)
+
+# Make geometry point column. We choose the crs to be 4326.
+data <- st_as_sf(data, coords = c("X", "Y"), remove = FALSE, 
+    crs = 4326, agr = "constant")
+
+# check crs
+st_crs(data)
+
+# Only keep relevant columns
+data <- data[c("X", "Y", "Region","Country.of.Origin","Farm.Name", "Processing.Method", "unit_of_measurement", "altitude_low_meters", "altitude_high_meters", "altitude_mean_meters", "Aroma", "Flavor", "Aftertaste", "Acidity", "Body", "Balance", "Uniformity", "Sweetness")]
+
+# Remove one observation where all scores are 0.
+data <- data %>% filter(Acidity != 0)
+
+```
+
+A quick overview of the data
+```{r}
+# Summary of the data
+summary(data)
+
+# Mapview to check correctness of lat and long. There seems to be some false datapoints in the oceans and outside coffee regions.
+mapview(data)
+
+```
+
+Clean up columns with altitude and processing methods
+```{r}
+# Removing altitudes that are clearly artefacts (coffee cannot grow 300 meters above sea level)
+data$altitude_mean_meters <- ifelse(0 < data$altitude_mean_meters & 3000 > data$altitude_mean_meters, data$altitude_mean_meters, NA)
+
+# Gather the processing methods in 4 overall categories:
+
+# semi
+data$Processing.Method <- ifelse(data$Processing.Method == "Pulped natural / honey" | data$Processing.Method == "Semi-washed / Semi-pulped", "semi", data$Processing.Method)
+# washed
+data$Processing.Method <- ifelse(data$Processing.Method == "Washed / Wet", "washed", data$Processing.Method)
+# natural
+data$Processing.Method <- ifelse(data$Processing.Method == "Natural / Dry", "natural", data$Processing.Method)
+# other
+data$Processing.Method <- ifelse(data$Processing.Method == "Other", "other", data$Processing.Method)
+
+
+# change column into factor and create a more appropriate name for it
+data <- data %>%  mutate(
+  Processing.Method = as.factor(Processing.Method)
+)
+colnames(data)[which(names(data) == "Processing.Method")] <- "processing_method"
+
+# the processing type 'washed' is held as the reference category
+data$processing_method <- relevel(data$processing_method, ref = "washed")
+
+
+# Overview
+
+# histogram
+hist(data$altitude_mean_meters, xlab = "Mean Altitude (m)")
+# Seems fairly normally distributed (That is an underlying assumption when we are feeding parameters into linear regression models)
+
+# Number in each processing category
+data %>% group_by(processing_method) %>% summarise(
+  sum = n()
+) # Very unevenly distributed. "washed" is by far the most common processing method. This should be kept in mind.
+
+```
+
+
+## Moran´s I
+
+In order to assess spatial auto-correlation on various coffee characteristics, we employ a Moran's I. 
+Since Moran's I is not really robust (as it is very sensitive to single values), we run Moran's I monte Carlo tests to assess how significant any potential correlations actually are. In that way, we can investigate how likely the data is given the assumption that the distribution is random (no spatial auto-correlation). Under a significance level of 0.05, this nul-hypothesis will be rejected.
+
+### Get neighbors and geographical weights
+```{r}
+
+# get neighbors (we define neighbors as within an Euclidean distance)
+distance <- 200
+
+# The function dnearneigh() identifies neighbours of every point by Euclidean distance between lower and upper bounds.
+coords <- data$geometry
+neighbors <- dnearneigh(coords, 0, distance, row.names=NULL)
+
+# Summary information about neighbors
+summary(neighbors, coords)
+
+
+## Plot neighbor links
+
+# Import world polygons
+world <- st_read("data/world_shape_file/TM_WORLD_BORDERS_SIMPL-0.3.shp")
+
+# Check that the crs is the same
+st_crs(world) == st_crs(data)
+
+# Show the connections
+plot(world$geometry); plot(neighbors, coords, col = "red",add = TRUE)
+
+
+# Using nb2listw() to create a listw (list of weights) object - a matrix of geographical weights.
+weight_matrix <- nb2listw(neighbors, glist=NULL, style="W", zero.policy=TRUE)
+
+```
+
+### Run Moran's I Monte Carlo
+
+A permutation test for Moran’s I statistic calculated by using nsim random permutations of the data for
+the given spatial weighting scheme, to establish the rank of the observed statistic in relation to the
+'nsim' simulated values.
+```{r}
+# Number of simulations
+nsim <- 999
+set.seed(1234)
+
+```
+
+__Balance__ 
+```{r}
+# Run Moran's I
+mc_balance <- moran.mc(data$Balance, weight_matrix, nsim, zero.policy=TRUE, alternative="greater",
+na.action=na.fail, spChk=NULL, return_boot=FALSE, adjust.n=TRUE)
+
+# Results
+mc_balance
+
+# Plot
+# In its default setting, the plot shows a linear fit through the point cloud. The slope of this line corresponds to Moran’s I
+moran.plot(data$Balance, weight_matrix, zero.policy=FALSE, spChk=NULL,
+xlab="Balance Score", ylab=NULL, quiet=NULL, plot=TRUE)
+plot(mc_balance)
+
+# plot the relationship between balance and its spatially lagged counterpart.
+inc.lag <- lag.listw(weight_matrix, data$Balance)
+plot(inc.lag ~ data$Balance, pch=16, asp=1., xlab = "Balance", ylab = "Spatially lagged neighbors")
+M1 <- lm(inc.lag ~ data$Balance)
+abline(M1, col="blue") # The slope of the line is the Moran’s I coefficient.
+
+# We see spatial structure when it comes to balance
+
+```
+
+__Acidity__ 
+```{r}
+# Run Moran's I
+mc_acidity <- moran.mc(data$Acidity, weight_matrix, nsim, zero.policy=TRUE, alternative="greater",
+na.action=na.fail, spChk=NULL, return_boot=FALSE, adjust.n=TRUE)
+
+# Results
+mc_acidity
+
+# Plot
+# In its default setting, the plot shows a linear fit through the point cloud. The slope of this line corresponds to Moran’s I
+moran.plot(data$Acidity, weight_matrix, zero.policy=FALSE, spChk=NULL, labels=NULL,
+xlab="Acidity Score", ylab=NULL, quiet=NULL, plot=TRUE)
+plot(mc_balance)
+
+# We see spatial structure when it comes to acidity - the estimate is however not as big large with balance
+
+# plot the relationship between balance and its spatially lagged counterpart.
+inc.lag <- lag.listw(weight_matrix, data$Acidity)
+plot(inc.lag ~ data$Acidity, pch=16, asp=1., xlab = "Aciditye", ylab = "Spatially lagged neighbors")
+M1 <- lm(inc.lag ~ data$Acidity)
+abline(M1, col="blue") # The slope of the line is the Moran’s I coefficient.
+
+
+```
+
+__Aroma__ 
+```{r}
+# Run Moran's I
+mc_aroma <- moran.mc(data$Aroma, weight_matrix, nsim, zero.policy=TRUE, alternative="greater",
+na.action=na.fail, spChk=NULL, return_boot=FALSE, adjust.n=TRUE)
+
+# Results
+mc_aroma
+
+# Plot
+# In its default setting, the plot shows a linear fit through the point cloud. The slope of this line corresponds to Moran’s I
+moran.plot(data$Aroma, weight_matrix, zero.policy=FALSE, spChk=NULL, labels=NULL,
+xlab="Aroma Score", ylab=NULL, quiet=NULL, plot=TRUE)
+plot(mc_aroma)
+
+# We see spatial structure when it comes to aroma as well.
+
+# plot the relationship between balance and its spatially lagged counterpart.
+inc.lag <- lag.listw(weight_matrix, data$Aroma)
+plot(inc.lag ~ data$Aroma, pch=16, asp=1., xlab = "Aroma", ylab = "Spatially lagged neighbors")
+M1 <- lm(inc.lag ~ data$Aroma)
+abline(M1, col="blue") # The slope of the line is the Moran’s I coefficient.
+
+```
+
+## Altitude 
+
+As altitude is know for being an essential spatial component when it comes to coffee production, we will as well predict the taste characteristics from altitude. Additionally, we add the way in which the beans hve been processed as a predictor.
+
+```{r}
+# Balance
+model_balance <- lm(Balance ~ altitude_mean_meters + processing_method, data = data)
+summary(model_balance)
+plot(model_balance)
+
+# Acidity
+model_acidity <- lm(Acidity ~ altitude_mean_meters + processing_method, data = data)
+summary(model_acidity)
+
+# Aroma
+model_aroma <- lm(Aroma ~ altitude_mean_meters + processing_method, data = data)
+summary(model_aroma)
+
+
+```
+
+
+## Visualizations
+
+### Mapping locations
+
+Mapping the location of coffee growing farms around the world. One can click on each farm and read its specific scores on various parameters.
+```{r}
+#creating a map with leaflet that displays the coffee farms + layers to manipulate
+basemap <- leaflet() %>%
+  # add different provider tiles
+  addProviderTiles("OpenStreetMap",group = "OpenStreetMap") %>%
+  addProviderTiles("Stamen.Toner",group = "Stamen.Toner" ) %>%
+  addProviderTiles("Stamen.Terrain", group = "Stamen.Terrain") %>%
+  addProviderTiles("Esri.WorldStreetMap", group = "Esri.WorldStreetMap") %>%
+  addProviderTiles("Wikimedia",group = "Wikimedia" ) %>%
+  addProviderTiles("CartoDB.Positron",group = "CartoDB.Positron") %>%
+  addProviderTiles("Esri.WorldImagery",group = "Esri.WorldImagery") %>%
+# add a layers control
+  addLayersControl(baseGroups = c(
+      "OpenStreetMap", "Stamen.Toner",
+      "Stamen.Terrain", "Esri.WorldStreetMap",
+      "Wikimedia", "CartoDB.Positron", "Esri.WorldImagery"),
+    # position it on the topleft
+    position = "topleft")
+
+#adding the pins 
+icon.fa <- makeAwesomeIcon(
+  icon = "coffee", markerColor = "green",
+  library = "fa",
+  iconColor = "black"
+)
+
+#merging the map and icons
+map_1 <- basemap %>%
+  addAwesomeMarkers(
+    lat = data$Y,
+    lng =data$X,
+    label = data$Region,
+    icon = icon.fa
+  )
+
+#display
+map_1
+
+
+```
+
+### Mapping tendencies by country
+
+Building an interactive map - one for aroma, one fore acidity and one for balance. They illustrate an average by country to enable a quick overview of general trends by country.
+```{r}
+
+#necessary preprocessing 
+#renaming country names so that they match the shapes of the countries - for plotting 
+data$Country.of.Origin[data$Country.of.Origin == "United States (Hawaii)"] <- "United States of America"
+data$Country.of.Origin[data$Country.of.Origin == "United States (Puerto Rico)"] <- "United States of America"
+data$Country.of.Origin[data$Country.of.Origin == "United States"] <- "Colombia" # there has been a mistake and all beans marked as coming from the USA were in fact from Columbia 
+data$Country.of.Origin[data$Country.of.Origin == "Tanzania, United Republic Of"] <- "Tanzania"
+
+
+#aggregating scores by countries + rounding to 2 decimal places 
+# mean aroma by country+  renaming columns
+mean_aroma_by_country <- aggregate(data$Aroma,by=list(data$Country.of.Origin), mean) 
+colnames(mean_aroma_by_country)[1] <- "country"
+mean_aroma_by_country$x <- round(mean_aroma_by_country$x,2)
+
+# mean acidity by country+  renaming columns +rounding to 2 decimal places 
+mean_acidity_by_country <- (aggregate(data$Acidity,by=list(data$Country.of.Origin), mean))
+colnames(mean_acidity_by_country)[1] <- "country"
+mean_acidity_by_country$x <- round(mean_acidity_by_country$x,2)
+
+
+# mean balance by country+  renaming columns +rounding to 2 decimal places 
+mean_balance_by_country <- aggregate(data$Balance,by=list(data$Country.of.Origin), mean) 
+colnames(mean_balance_by_country)[1] <- "country"
+mean_balance_by_country$x <- round(mean_balance_by_country$x,2)
+
+#building interactive maps 
+#Aroma
+aroma_map <- highchart() %>%
+  hc_add_series_map(
+    worldgeojson,mean_aroma_by_country, value = "x", joinBy =c("name",'country'),
+    name = "Mean score"
+    )  %>% 
+  hc_colorAxis( min = 370, max = 840,minColor="#F1B6DA",maxColor="#CA0020") %>% 
+  hc_title(text = "World Map") %>% 
+  hc_subtitle(text = "Coffee Aroma")
+
+# Run map
+aroma_map
+# Save map
+saveWidget(aroma_map, "data/aroma_map.html", selfcontained = TRUE)
+
+
+#Acidity
+acidity_map <- highchart() %>%
+  hc_add_series_map(
+    worldgeojson,mean_acidity_by_country, value = "x", joinBy =c("name",'country'),
+    name = "Mean score"
+    )  %>% 
+  hc_colorAxis( min = 400, max = 840,minColor="#B8E186",maxColor="#018571") %>% 
+  hc_title(text = "World Map") %>% 
+  hc_subtitle(text = "Coffee Acidity")
+
+# run map
+acidity_map
+# Save map
+saveWidget(acidity_map, "data/acidity_map.html", selfcontained = TRUE)
+
+
+#Balance
+balance_map <- highchart() %>%
+  hc_add_series_map(
+    worldgeojson,mean_balance_by_country, value = "x", joinBy =c("name",'country'),
+    name = "Mean score"
+    )  %>% 
+  hc_colorAxis( min = 60, max = 825,minColor="#EFFF7F",maxColor="#E66101") %>% 
+  hc_title(text = "World Map") %>% 
+  hc_subtitle(text = "Coffee Balance")
+
+# run map
+balance_map
+# Save map
+saveWidget(balance_map, "data/balance_map.html", selfcontained = TRUE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
