@@ -1,7 +1,7 @@
 ---
-title: "DataAnalysis"
-author: "Aske Svane Qvist and Hania Matera"
-date: "2 June 2021"
+title: "Data Analysis for the exam in Spatial Analytics"
+author: "Aske Svane Qvist & Hania Matera"
+date: "10 June 2021"
 output: html_document
 ---
 
@@ -308,6 +308,8 @@ map_1 <- basemap %>%
 #display
 map_1
 
+saveWidget(map_1, file="maps/farms_map.html")
+
 
 ```
 
@@ -341,6 +343,10 @@ mean_balance_by_country <- aggregate(data$Balance,by=list(data$Country.of.Origin
 colnames(mean_balance_by_country)[1] <- "country"
 mean_balance_by_country$x <- round(mean_balance_by_country$x,2)
 
+# Find min and max scores by country to create an appropriate scale
+data %>% group_by(country)
+
+
 #building interactive maps 
 #Aroma
 aroma_map <- highchart() %>%
@@ -348,14 +354,14 @@ aroma_map <- highchart() %>%
     worldgeojson,mean_aroma_by_country, value = "x", joinBy =c("name",'country'),
     name = "Mean score"
     )  %>% 
-  hc_colorAxis( min = 370, max = 840,minColor="#F1B6DA",maxColor="#CA0020") %>% 
+  hc_colorAxis( min = 7, max = 8.4,minColor="#F1B6DA",maxColor="#CA0020") %>% 
   hc_title(text = "World Map") %>% 
   hc_subtitle(text = "Coffee Aroma")
 
 # Run map
 aroma_map
 # Save map
-saveWidget(aroma_map, "data/aroma_map.html", selfcontained = TRUE)
+saveWidget(aroma_map, "maps/aroma_map.html", selfcontained = TRUE)
 
 
 #Acidity
@@ -364,14 +370,14 @@ acidity_map <- highchart() %>%
     worldgeojson,mean_acidity_by_country, value = "x", joinBy =c("name",'country'),
     name = "Mean score"
     )  %>% 
-  hc_colorAxis( min = 400, max = 840,minColor="#B8E186",maxColor="#018571") %>% 
+  hc_colorAxis( min = 6.6, max = 8.4,minColor="#EFFF7F",maxColor="#E66101") %>% 
   hc_title(text = "World Map") %>% 
   hc_subtitle(text = "Coffee Acidity")
 
 # run map
 acidity_map
 # Save map
-saveWidget(acidity_map, "data/acidity_map.html", selfcontained = TRUE)
+saveWidget(acidity_map, "maps/acidity_map.html", selfcontained = TRUE)
 
 
 #Balance
@@ -380,14 +386,14 @@ balance_map <- highchart() %>%
     worldgeojson,mean_balance_by_country, value = "x", joinBy =c("name",'country'),
     name = "Mean score"
     )  %>% 
-  hc_colorAxis( min = 60, max = 825,minColor="#EFFF7F",maxColor="#E66101") %>% 
+  hc_colorAxis( min = 7, max = 8.3,minColor="#B8E186",maxColor="#018571") %>% 
   hc_title(text = "World Map") %>% 
   hc_subtitle(text = "Coffee Balance")
 
 # run map
 balance_map
 # Save map
-saveWidget(balance_map, "data/balance_map.html", selfcontained = TRUE)
+saveWidget(balance_map, "maps/balance_map.html", selfcontained = TRUE)
 
 ```
 
