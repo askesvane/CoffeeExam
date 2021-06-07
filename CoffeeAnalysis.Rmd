@@ -18,7 +18,8 @@ This script contains data pre-processing, visualisations, as well as spatial ana
 ## Packages
 ```{r}
 library(pacman)
-p_load(tidyverse, sf, mapview, spdep, leaflet, worldgeojson, highcharter, htmlwidgets)
+p_load(tidyverse, sf, mapview, spdep, leaflet, worldgeojson, highcharter, htmlwidgets, jtools)
+
 
 ```
 
@@ -81,7 +82,12 @@ mapview(data)
 Clean up columns with altitude and processing methods
 ```{r}
 # Removing altitudes that are clearly artefacts (coffee cannot grow 300 meters above sea level)
-data$altitude_mean_meters <- ifelse(0 < data$altitude_mean_meters & 3000 > data$altitude_mean_meters, data$altitude_mean_meters, NA)
+data$altitude_mean_meters <- ifelse(0 < data$altitude_mean_meters & 5000 > data$altitude_mean_meters, data$altitude_mean_meters, NA)
+
+# change from meters to km as it is more interprestable after running linear models
+data <- data %>% mutate(
+  altitude_km = altitude_mean_meters / 1000
+)
 
 # Gather the processing methods in 4 overall categories:
 
@@ -102,13 +108,13 @@ data <- data %>%  mutate(
 colnames(data)[which(names(data) == "Processing.Method")] <- "processing_method"
 
 # the processing type 'washed' is held as the reference category
-data$processing_method <- relevel(data$processing_method, ref = "washed")
+data$processing_method <- relevel(data$processing_method, ref = "natural")
 
 
 # Overview
 
 # histogram
-hist(data$altitude_mean_meters, xlab = "Mean Altitude (m)")
+hist(data$altitude_km, xlab = "Mean Altitude (km)")
 # Seems fairly normally distributed (That is an underlying assumption when we are feeding parameters into linear regression models)
 
 # Number in each processing category
@@ -170,11 +176,15 @@ set.seed(1234)
 __Balance__ 
 ```{r}
 # Run Moran's I
+# moran.test
+moran.test(data$Balance, weight_matrix, randomisation=TRUE, zero.policy=TRUE, alternative="greater", rank = FALSE, na.action=na.omit, spChk=NULL, adjust.n=TRUE, drop.EI2=FALSE)
+
+# Run Moran's I MC
 mc_balance <- moran.mc(data$Balance, weight_matrix, nsim, zero.policy=TRUE, alternative="greater",
 na.action=na.fail, spChk=NULL, return_boot=FALSE, adjust.n=TRUE)
 
 # Results
-mc_balance
+summarise(mc_balance)
 
 # Plot
 # In its default setting, the plot shows a linear fit through the point cloud. The slope of this line corresponds to Moran’s I
@@ -211,7 +221,7 @@ plot(mc_balance)
 
 # plot the relationship between balance and its spatially lagged counterpart.
 inc.lag <- lag.listw(weight_matrix, data$Acidity)
-plot(inc.lag ~ data$Acidity, pch=16, asp=1., xlab = "Aciditye", ylab = "Spatially lagged neighbors")
+plot(inc.lag ~ data$Acidity, pch=16, asp=1., xlab = "Acidity", ylab = "Spatially lagged neighbors")
 M1 <- lm(inc.lag ~ data$Acidity)
 abline(M1, col="blue") # The slope of the line is the Moran’s I coefficient.
 
@@ -248,17 +258,17 @@ abline(M1, col="blue") # The slope of the line is the Moran’s I coefficient.
 As altitude is know for being an essential spatial component when it comes to coffee production, we will as well predict the taste characteristics from altitude. Additionally, we add the way in which the beans hve been processed as a predictor.
 
 ```{r}
+
 # Balance
-model_balance <- lm(Balance ~ altitude_mean_meters + processing_method, data = data)
+model_balance <- lm(Balance ~ altitude_km + processing_method, data = data)
 summary(model_balance)
-plot(model_balance)
 
 # Acidity
-model_acidity <- lm(Acidity ~ altitude_mean_meters + processing_method, data = data)
+model_acidity <- lm(Acidity ~ altitude_km + processing_method, data = data)
 summary(model_acidity)
 
 # Aroma
-model_aroma <- lm(Aroma ~ altitude_mean_meters + processing_method, data = data)
+model_aroma <- lm(Aroma ~ altitude_km + processing_method, data = data)
 summary(model_aroma)
 
 
