@@ -19,7 +19,7 @@ The data used in the following study was found on the online service [Kaggle](ht
 
 ## Usage (reproducing the results)
 
-### Virtual environment
+### Clone the Repository
 In order to reproduce the results, please clone the repository by executing the following code from the terminal:
 
 ```bash
