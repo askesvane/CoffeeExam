@@ -17,7 +17,11 @@ This script contains data pre-processing, visualisations, as well as spatial ana
 
 ## Packages
 ```{r}
+# Install pacman
+install.packages("pacman")
 library(pacman)
+
+# Use pacman to install additional packages
 p_load(tidyverse, sf, mapview, spdep, leaflet, worldgeojson, highcharter, htmlwidgets, jtools)
 
 

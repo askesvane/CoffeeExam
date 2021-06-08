@@ -17,6 +17,17 @@ The project was conducted as a group project between Hanna Janina Matera (au6032
 
 The data used in the following study was found on the online service [Kaggle](https://www.kaggle.com/datasets) and can be downloaded from the open GitHub repository [here](https://github.com/jldbc/coffee-quality-database). The dataset comprises reviews of 1340 different Arabica and Robusta coffees given by trained reviewers. The reviews were scraped from the online coffee-rating service Coffee Quality Institute (CQI) and contained various information about each coffee type such as aroma, flavor, aftertaste, acidity, body, balance, etc. The geographical coordinates were subsequently added by manually retrieving them from Google Maps.
 
+## Usage (reproducing the results)
+
+### Virtual environment
+In order to reproduce the results, please clone the repository by executing the following code from the terminal:
+
+```bash
+git clone https://github.com/askesvane/CoffeeExam.git
+
+```
+All necessary packages to run the code are provided in the beginning of the script.
+
 ## Repository Structure and Files
 This repository has the following directory structure:
 
