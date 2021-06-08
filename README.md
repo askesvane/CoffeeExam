@@ -1,4 +1,4 @@
-# Exploring the Spatial Aspect of Coffee Production
+# Exploring the Spatial Aspects of Coffee Production
 
 ## The Repository
 
