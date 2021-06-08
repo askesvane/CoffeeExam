@@ -23,7 +23,7 @@ The data used in the following study was found on the online service [Kaggle](ht
 In order to reproduce the results, please clone the repository by executing the following code from the terminal:
 
 ```bash
-git clone https://github.com/askesvane/CoffeeExam.git
+git clone https://github.com/askesvane/CoffeeExam.git
 
 ```
 All necessary packages to run the code are provided in the beginning of the script.
