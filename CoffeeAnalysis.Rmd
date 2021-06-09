@@ -219,7 +219,7 @@ mc_acidity
 # In its default setting, the plot shows a linear fit through the point cloud. The slope of this line corresponds to Moran’s I
 moran.plot(data$Acidity, weight_matrix, zero.policy=FALSE, spChk=NULL, labels=NULL,
 xlab="Acidity Score", ylab=NULL, quiet=NULL, plot=TRUE)
-plot(mc_balance)
+plot(mc_acidity)
 
 # We see spatial structure when it comes to acidity - the estimate is however not as big large with balance
 
